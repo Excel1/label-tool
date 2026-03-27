@@ -1,4 +1,5 @@
-import { connect, type IClientOptions, type MqttClient } from 'mqtt';
+import * as mqtt from 'mqtt';
+import type { IClientOptions, MqttClient } from 'mqtt';
 import type { AnnotationFrame } from 'src/interfaces/Annotation';
 
 const config = {
@@ -68,7 +69,7 @@ export default {
         password: config.password,
       };
 
-      const activeClient = connect(config.brokerUrl, options);
+      const activeClient = mqtt.connect(config.brokerUrl, options);
       client = activeClient;
 
       await new Promise<void>((resolve, reject) => {

@@ -13,8 +13,6 @@ interface ImportMetaEnv {
   readonly VITE_MQTT_CLIENT_ID_PREFIX: string;
   readonly VITE_MQTT_INPUT_TOPIC: string;
   readonly VITE_MQTT_OUTPUT_TOPIC: string;
-  readonly VITE_MOCK_INCLUDE_LABELS: 'true' | 'false';
-  readonly VITE_YOLO_LABEL_CLASSES?: string;
 }
 
 interface ImportMeta {

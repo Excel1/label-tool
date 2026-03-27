@@ -29,7 +29,7 @@ Dieses Dokument definiert verbindliche Architektur- und UI-Regeln fuer das Proje
 - Keine echten Secrets im Frontend-Bundle hinterlegen.
 - Erwartete Variablen in einer `.env.example` dokumentieren.
 - Betriebsmodus per `.env` umschaltbar (`mock` oder `mqtt`).
-- Erlaubte Label-Klassen zentral per Konfiguration definieren (nicht hart in Komponenten).
+- Erlaubte Label-Klassen zentral ueber `src/assets/classes.txt` definieren (`id + name`), nicht hart in Komponenten.
 
 ## Mock-Modus (ohne Verbindung)
 - Wenn keine MQTT-Verbindung verfuegbar ist, muss ein Mock-Modus nutzbar sein.

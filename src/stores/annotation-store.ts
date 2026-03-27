@@ -1,43 +1,58 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
 
-import sampleImageBase64Raw from '../assets/mock/sample-image-base64.txt?raw';
+import classesRaw from '../assets/classes.txt?raw';
 import sampleLabelsRaw from '../assets/mock/sample-labels.txt?raw';
-import type { AnnotationFrame, AnnotationQueueItem } from 'src/interfaces/Annotation';
+import { createAnnotationQueueItem } from 'src/helpers/annotation-queue.helper';
+import { parseYoloLabels, serializeYoloLabels } from 'src/helpers/yolo.helper';
+import type {
+  AnnotationBox,
+  AnnotationFrame,
+  AnnotationQueueItem
+} from 'src/interfaces/Annotation';
+import { loadAnnotationClasses } from 'src/services/annotation-classes.service';
 import MqttAnnotationService from 'src/services/mqtt-annotation.service';
+import MockImageService from 'src/services/mock-image.service';
 
-let queueId = 0;
 let unsubscribe: (() => void) | null = null;
-
-function createQueueItem(payload: AnnotationFrame): AnnotationQueueItem {
-  queueId += 1;
-
-  return {
-    id: `msg-${queueId}`,
-    image: payload.image,
-    labels: payload.labels,
-  };
-}
 
 export const useAnnotationStore = defineStore('annotation', {
   state: () => ({
     queue: [] as AnnotationQueueItem[],
     current: null as AnnotationQueueItem | null,
+    classes: loadAnnotationClasses(classesRaw),
     isConnected: false,
     isSubmitting: false,
   }),
   getters: {
     queueLength: (state) => state.queue.length,
+    classOptions: (state) => state.classes.map((item) => ({ label: `${item.id} - ${item.name}`, value: item.id })),
+    classColor: (state) => (classId: number) =>
+      state.classes.find((item) => item.id === classId)?.color ?? '#1976d2',
   },
   actions: {
-    enqueue(payload: AnnotationFrame) {
-      this.queue.push(createQueueItem(payload));
-      this.current = this.queue.length > 0 ? this.queue[0] : null;
+    enqueueFrame(payload: AnnotationFrame) {
+      this.queue.push(createAnnotationQueueItem(payload, parseYoloLabels(payload.labels)));
+      if (!this.current) {
+        this.current = this.queue[0] ?? null;
+      }
     },
-    enqueueMockFrame() {
-      this.enqueue({
-        image: sampleImageBase64Raw.trim(),
-        labels: import.meta.env.VITE_MOCK_INCLUDE_LABELS === 'true' ? sampleLabelsRaw.trim() : '',
+    async enqueueMockFrame() {
+      MockImageService.clearCache();
+      const mockImageBase64 = await MockImageService.getBase64Image();
+      this.enqueueFrame({
+        image: mockImageBase64,
+        labels: sampleLabelsRaw.trim(),
       });
+    },
+    setCurrentBoxes(boxes: AnnotationBox[]) {
+      if (!this.current) {
+        return;
+      }
+
+      this.current.boxes = boxes.map((box) => ({ ...box }));
+      if (this.queue.length > 0) {
+        this.queue[0].boxes = this.current.boxes.map((box) => ({ ...box }));
+      }
     },
     async startListening() {
       try {
@@ -49,10 +64,11 @@ export const useAnnotationStore = defineStore('annotation', {
         this.isConnected = true;
 
         unsubscribe = await MqttAnnotationService.subscribe((frame) => {
-          this.enqueue(frame);
+          this.enqueueFrame(frame);
         });
       } catch (error) {
         console.log(error);
+        throw error;
       }
     },
     async stopListening() {
@@ -82,13 +98,14 @@ export const useAnnotationStore = defineStore('annotation', {
 
         await MqttAnnotationService.publish({
           image: this.current.image,
-          labels: this.current.labels,
+          labels: serializeYoloLabels(this.current.boxes),
         });
 
         this.queue.shift();
         this.current = this.queue.length > 0 ? this.queue[0] : null;
       } catch (error) {
         console.log(error);
+        throw error;
       } finally {
         this.isSubmitting = false;
       }
