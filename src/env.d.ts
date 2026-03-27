@@ -7,7 +7,6 @@ declare namespace NodeJS {
 }
 
 interface ImportMetaEnv {
-  readonly VITE_APP_TRANSPORT_MODE: 'mock' | 'mqtt';
   readonly VITE_MQTT_BROKER_URL: string;
   readonly VITE_MQTT_USERNAME?: string;
   readonly VITE_MQTT_PASSWORD?: string;
