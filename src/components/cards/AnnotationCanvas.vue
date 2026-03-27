@@ -123,9 +123,11 @@ function initCanvas() {
     const event = opt.e;
     let zoom = canvas.getZoom();
     zoom *= event.deltaY < 0 ? 1.1 : 0.9;
-    zoom = Math.max(0.5, Math.min(8, zoom));
+    zoom = Math.max(1, Math.min(8, zoom));
 
     canvas.zoomToPoint(new Point(event.offsetX, event.offsetY), zoom);
+    clampViewportTransform(canvas);
+    canvas.requestRenderAll();
     event.preventDefault();
     event.stopPropagation();
   });
@@ -172,6 +174,7 @@ function initCanvas() {
       if (vpt) {
         vpt[4] += event.clientX - panPoint.value.x;
         vpt[5] += event.clientY - panPoint.value.y;
+        clampViewportTransform(canvas);
         canvas.requestRenderAll();
       }
 
@@ -297,6 +300,7 @@ async function loadImage() {
       height: Math.max(220, viewportHeight),
     });
     canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    clampViewportTransform(canvas);
     return;
   }
 
@@ -310,18 +314,13 @@ async function loadImage() {
     }
 
     const viewportWidth = viewportRef.value?.clientWidth ?? sourceWidth;
-    const viewportHeight = viewportRef.value?.clientHeight ?? sourceHeight;
     const safeViewportWidth = viewportWidth > 1 ? viewportWidth : sourceWidth;
-    const safeViewportHeight = viewportHeight > 1 ? viewportHeight : sourceHeight;
-
-    const fitScale = Math.min(safeViewportWidth / sourceWidth, safeViewportHeight / sourceHeight);
-    const scale = Number.isFinite(fitScale) ? fitScale : 1;
-
-    const width = Math.max(320, Math.round(sourceWidth * scale));
-    const height = Math.max(220, Math.round(sourceHeight * scale));
+    const width = Math.max(320, Math.round(safeViewportWidth));
+    const height = Math.max(220, Math.round((sourceHeight / sourceWidth) * width));
 
     canvas.setDimensions({ width, height });
     canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    clampViewportTransform(canvas);
 
     image.set({
       left: 0,
@@ -528,19 +527,31 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function clampViewportTransform(canvas: Canvas) {
+  const vpt = canvas.viewportTransform;
+  if (!vpt) {
+    return;
+  }
+
+  const zoom = canvas.getZoom();
+  const width = canvas.getWidth();
+  const height = canvas.getHeight();
+
+  const minTranslateX = width * (1 - zoom);
+  const minTranslateY = height * (1 - zoom);
+
+  vpt[4] = clamp(vpt[4], minTranslateX, 0);
+  vpt[5] = clamp(vpt[5], minTranslateY, 0);
+}
+
 </script>
 
 <style scoped>
 .annotation-viewport {
   width: 100%;
-  min-height: 70vh;
-  max-height: 86vh;
-  overflow: hidden;
+  overflow: auto;
   border-radius: 8px;
-  background: #101318;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  background: transparent;
 }
 
 .annotation-viewport canvas {
