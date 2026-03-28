@@ -1,4 +1,4 @@
-import * as mqtt from 'mqtt';
+import mqtt from 'mqtt';
 import type { IClientOptions, MqttClient } from 'mqtt';
 import type { AnnotationFrame } from 'src/interfaces/Annotation';
 
