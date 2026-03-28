@@ -1,13 +1,10 @@
 export default {
-  failed: 'Aktion fehlgeschlagen',
-  success: 'Aktion war erfolgreich',
   annotation: {
     actions: {
       connect: 'Mit MQTT verbinden',
       mock: 'Mock-Bild in Queue',
       send: 'Bild senden',
-      tools: 'Mehr',
-      removeSelected: 'Ausgewaehlte Box loeschen'
+      tools: 'Mehr'
     },
     status: {
       connected: 'Verbunden',

@@ -16,8 +16,6 @@
   </q-layout>
 </template>
 
-<script setup lang="ts"></script>
-
 <style scoped>
 .app-header {
   background: #d22630;

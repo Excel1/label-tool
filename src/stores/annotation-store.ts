@@ -13,6 +13,7 @@ import { loadAnnotationClasses } from 'src/services/annotation-classes.service';
 import MqttAnnotationService from 'src/services/mqtt-annotation.service';
 import MockImageService from 'src/services/mock-image.service';
 
+const DEFAULT_CLASS_COLOR = '#1976d2';
 let unsubscribe: (() => void) | null = null;
 
 export const useAnnotationStore = defineStore('annotation', {
@@ -25,6 +26,7 @@ export const useAnnotationStore = defineStore('annotation', {
   }),
   getters: {
     queueLength: (state) => state.queue.length,
+    // Quasar q-select options for class picker.
     classOptions: (state) =>
       state.classes.map((item) => ({
         label: item.name,
@@ -32,18 +34,21 @@ export const useAnnotationStore = defineStore('annotation', {
         color: item.color,
       })),
     classColor: (state) => (classId: number) =>
-      state.classes.find((item) => item.id === classId)?.color ?? '#1976d2',
+      state.classes.find((item) => item.id === classId)?.color ?? DEFAULT_CLASS_COLOR,
     className: (state) => (classId: number) =>
       state.classes.find((item) => item.id === classId)?.name ?? `class-${classId}`,
   },
   actions: {
     enqueueFrame(payload: AnnotationFrame) {
+      // Normalize labels to editable box objects when data enters the queue.
       this.queue.push(createAnnotationQueueItem(payload, parseYoloLabels(payload.labels)));
       if (!this.current) {
         this.current = this.queue[0] ?? null;
       }
     },
+
     async enqueueMockFrame() {
+      // Re-read mock image each time to always use current test file content.
       MockImageService.clearCache();
       const mockImageBase64 = await MockImageService.getBase64Image();
       this.enqueueFrame({
@@ -51,18 +56,24 @@ export const useAnnotationStore = defineStore('annotation', {
         labels: sampleLabelsRaw.trim(),
       });
     },
+
     setCurrentBoxes(boxes: AnnotationBox[]) {
       if (!this.current) {
         return;
       }
 
-      this.current.boxes = boxes.map((box) => ({ ...box }));
+      const clonedBoxes = boxes.map((box) => ({ ...box }));
+      this.current.boxes = clonedBoxes;
+
+      // Keep queue head in sync with the currently edited item.
       if (this.queue.length > 0) {
-        this.queue[0].boxes = this.current.boxes.map((box) => ({ ...box }));
+        this.queue[0].boxes = clonedBoxes.map((box) => ({ ...box }));
       }
     },
+
     async startListening() {
       try {
+        // Already subscribed.
         if (unsubscribe) {
           return;
         }
@@ -74,10 +85,11 @@ export const useAnnotationStore = defineStore('annotation', {
           this.enqueueFrame(frame);
         });
       } catch (error) {
-        console.log(error);
+        console.error(error);
         throw error;
       }
     },
+
     async stopListening() {
       try {
         if (unsubscribe) {
@@ -87,7 +99,7 @@ export const useAnnotationStore = defineStore('annotation', {
 
         await MqttAnnotationService.disconnect();
       } catch (error) {
-        console.log(error);
+        console.error(error);
       } finally {
         this.isConnected = false;
         this.isSubmitting = false;
@@ -95,6 +107,7 @@ export const useAnnotationStore = defineStore('annotation', {
         this.current = null;
       }
     },
+
     async submitCurrent() {
       try {
         if (!this.current) {
@@ -117,7 +130,7 @@ export const useAnnotationStore = defineStore('annotation', {
         this.queue.shift();
         this.current = this.queue.length > 0 ? this.queue[0] : null;
       } catch (error) {
-        console.log(error);
+        console.error(error);
         throw error;
       } finally {
         this.isSubmitting = false;

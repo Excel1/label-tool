@@ -193,7 +193,9 @@ const $q = useQuasar();
 const { t } = useI18n();
 const annotationStore = useAnnotationStore();
 
+// Currently selected class for new boxes and active box edits.
 const selectedClassId = ref<number>(annotationStore.classOptions[0]?.value ?? 0);
+// Index in currentBoxes that should be selected in both list and canvas.
 const selectedBoxIndex = ref(-1);
 
 const currentImageSrc = computed(() => {
@@ -205,6 +207,7 @@ const currentImageSrc = computed(() => {
   return image.startsWith('data:image') ? image : `data:image/jpeg;base64,${image}`;
 });
 
+// Reactive alias for current frame boxes.
 const currentBoxes = computed(() => annotationStore.current?.boxes ?? []);
 
 watch(
@@ -231,6 +234,7 @@ watch(currentBoxes, (boxes) => {
 });
 
 onMounted(() => {
+  // Try to connect automatically in background on page load.
   void onStartListening(false);
 });
 
@@ -255,6 +259,7 @@ function onSelectBox(index: number) {
 }
 
 function onDeleteBox(index: number) {
+  // Remove selected box from the current frame.
   const nextBoxes = currentBoxes.value.filter((_, itemIndex) => itemIndex !== index);
   annotationStore.setCurrentBoxes(nextBoxes);
 
@@ -268,6 +273,13 @@ function onDeleteBox(index: number) {
   }
 }
 
+function notify(type: 'positive' | 'negative', messageKey: string) {
+  $q.notify({
+    type,
+    message: t(messageKey),
+  });
+}
+
 function onImageLoadFailed(message: string) {
   $q.notify({
     type: 'negative',
@@ -279,17 +291,11 @@ async function onStartListening(showNotify = true) {
   try {
     await annotationStore.startListening();
     if (showNotify) {
-      $q.notify({
-        type: 'positive',
-        message: t('annotation.notify.connected'),
-      });
+      notify('positive', 'annotation.notify.connected');
     }
   } catch {
     if (showNotify) {
-      $q.notify({
-        type: 'negative',
-        message: t('annotation.notify.connectFailed'),
-      });
+      notify('negative', 'annotation.notify.connectFailed');
     }
   }
 }
@@ -297,15 +303,9 @@ async function onStartListening(showNotify = true) {
 async function onEnqueueMock() {
   try {
     await annotationStore.enqueueMockFrame();
-    $q.notify({
-      type: 'positive',
-      message: t('annotation.notify.mockQueued'),
-    });
+    notify('positive', 'annotation.notify.mockQueued');
   } catch {
-    $q.notify({
-      type: 'negative',
-      message: t('annotation.notify.mockFailed'),
-    });
+    notify('negative', 'annotation.notify.mockFailed');
   }
 }
 
@@ -316,15 +316,9 @@ async function onSubmitCurrent() {
 
   try {
     await annotationStore.submitCurrent();
-    $q.notify({
-      type: 'positive',
-      message: t('annotation.notify.sent'),
-    });
+    notify('positive', 'annotation.notify.sent');
   } catch {
-    $q.notify({
-      type: 'negative',
-      message: t('annotation.notify.sendFailed'),
-    });
+    notify('negative', 'annotation.notify.sendFailed');
   }
 }
 </script>

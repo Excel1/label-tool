@@ -1,6 +1,7 @@
 import type { AnnotationClass } from 'src/interfaces/Annotation';
 
 export function loadAnnotationClasses(raw: string): AnnotationClass[] {
+  // Support both "id name" and plain "name" lines, skip comments.
   const lines = raw
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -9,6 +10,7 @@ export function loadAnnotationClasses(raw: string): AnnotationClass[] {
   const map = new Map<number, string>();
 
   lines.forEach((line, index) => {
+    // Accepted formats: "0 person" or "0: person" or "0 - person".
     const match = line.match(/^(\d+)\s*[,:;-]?\s+(.+)$/);
 
     if (match) {
@@ -26,6 +28,7 @@ export function loadAnnotationClasses(raw: string): AnnotationClass[] {
   });
 
   if (map.size === 0) {
+    // Ensure at least one fallback class exists.
     map.set(0, 'class-0');
   }
 

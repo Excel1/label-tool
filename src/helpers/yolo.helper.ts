@@ -10,6 +10,7 @@ export function parseYoloLabels(raw: string): AnnotationBox[] {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .map((line) => {
+      // YOLO line format: class x_center y_center width height (normalized 0..1).
       const [classPart, xCenterPart, yCenterPart, widthPart, heightPart] = line.split(/\s+/);
 
       const classId = Number.parseInt(classPart, 10);
@@ -47,6 +48,7 @@ export function parseYoloLabels(raw: string): AnnotationBox[] {
 export function serializeYoloLabels(items: AnnotationBox[]) {
   return items
     .map((box) => {
+      // Convert top-left representation back to YOLO center format.
       const xCenter = box.x + box.width / 2;
       const yCenter = box.y + box.height / 2;
       return `${box.classId} ${xCenter.toFixed(6)} ${yCenter.toFixed(6)} ${box.width.toFixed(6)} ${box.height.toFixed(6)}`;

@@ -13,6 +13,7 @@ function loadHtmlImage(source: string) {
 }
 
 async function blobToNormalizedPngDataUrl(blob: Blob) {
+  // Decode through browser image pipeline to avoid corrupted direct base64 conversions.
   const objectUrl = URL.createObjectURL(blob);
 
   try {
@@ -28,6 +29,7 @@ async function blobToNormalizedPngDataUrl(blob: Blob) {
     canvas.width = width;
     canvas.height = height;
 
+    // Draw via canvas and export as PNG data URL for stable rendering in Fabric.
     const context = canvas.getContext('2d');
     if (!context) {
       throw new Error('Could not create canvas context for mock image conversion.');
@@ -43,6 +45,7 @@ async function blobToNormalizedPngDataUrl(blob: Blob) {
 export default {
   async getBase64Image() {
     try {
+      // Reuse in-memory data URL to avoid repeated fetch/decode work.
       if (base64Cache) {
         return base64Cache;
       }
@@ -61,6 +64,7 @@ export default {
   },
 
   clearCache() {
+    // Explicitly reset cache when caller wants to reload mock image from disk.
     base64Cache = null;
   },
 };
