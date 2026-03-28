@@ -6,7 +6,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { Canvas, FabricImage, Point, Rect } from 'fabric';
+import { Canvas, FabricImage, FabricText, Point, Rect } from 'fabric';
 import type { FabricObject, ObjectEvents, RectProps, SerializedRectProps } from 'fabric';
 
 import type { AnnotationBox } from 'src/interfaces/Annotation';
@@ -16,6 +16,7 @@ const props = defineProps<{
   boxes: AnnotationBox[];
   selectedClassId: number;
   classColor: (classId: number) => string;
+  className: (classId: number) => string;
 }>();
 
 const emit = defineEmits<{
@@ -32,6 +33,7 @@ const fabricCanvas = shallowRef<Canvas | null>(null);
 const backgroundImage = shallowRef<FabricImage | null>(null);
 
 const rectClassMap = new WeakMap<AnyRect, number>();
+const rectLabelMap = new WeakMap<AnyRect, FabricText>();
 
 const syncingFromProps = ref(false);
 const isPanning = ref(false);
@@ -101,6 +103,7 @@ watch(
 
     setRectClass(active, classId);
     styleRect(active, classId);
+    syncRectLabel(active, canvas);
     canvas.requestRenderAll();
     emitBoxesFromCanvas();
   }
@@ -164,6 +167,7 @@ function initCanvas() {
     drawingRect.value = rect;
 
     canvas.add(rect);
+    syncRectLabel(rect, canvas);
   });
 
   canvas.on('mouse:move', (opt) => {
@@ -201,6 +205,7 @@ function initCanvas() {
       height,
     });
 
+    syncRectLabel(drawingRect.value, canvas);
     canvas.requestRenderAll();
   });
 
@@ -235,6 +240,7 @@ function initCanvas() {
 
     canvas.setActiveObject(rect as unknown as FabricObject);
     emit('update:selectedClassId', getRectClass(rect));
+    syncRectLabel(rect, canvas);
 
     drawingRect.value = null;
     drawingStart.value = null;
@@ -245,6 +251,10 @@ function initCanvas() {
 
   canvas.on('object:modified', () => {
     constrainActiveRectToImageBounds(canvas);
+    const active = canvas.getActiveObject();
+    if (active instanceof Rect) {
+      syncRectLabel(active, canvas);
+    }
     canvas.requestRenderAll();
     emitBoxesFromCanvas();
   });
@@ -252,12 +262,14 @@ function initCanvas() {
   canvas.on('object:moving', (opt) => {
     if (opt.target instanceof Rect) {
       constrainRectToImageBounds(opt.target, canvas);
+      syncRectLabel(opt.target, canvas);
     }
   });
 
   canvas.on('object:scaling', (opt) => {
     if (opt.target instanceof Rect) {
       constrainRectToImageBounds(opt.target, canvas);
+      syncRectLabel(opt.target, canvas);
     }
   });
 
@@ -360,13 +372,15 @@ function drawBoxesFromProps() {
 
   canvas
     .getObjects()
-    .filter((obj) => obj instanceof Rect)
+    .filter((obj) => obj instanceof Rect || obj instanceof FabricText)
     .forEach((obj) => {
       canvas.remove(obj);
     });
 
   props.boxes.forEach((box) => {
-    canvas.add(createRect(box));
+    const rect = createRect(box);
+    canvas.add(rect);
+    syncRectLabel(rect, canvas);
   });
 
   if (backgroundImage.value) {
@@ -482,6 +496,40 @@ function styleRect(rect: AnyRect, classId: number) {
     fill: 'transparent',
     cornerColor: color,
     cornerStrokeColor: '#ffffff',
+  });
+}
+
+function syncRectLabel(rect: AnyRect, canvas: Canvas) {
+  const classId = getRectClass(rect);
+  const color = props.classColor(classId);
+  const textValue = props.className(classId);
+
+  let label = rectLabelMap.get(rect);
+  if (!label) {
+    label = new FabricText(textValue, {
+      fontSize: 12,
+      fontWeight: '600',
+      fontFamily: 'Roboto',
+      selectable: false,
+      evented: false,
+      objectCaching: false,
+      originX: 'left',
+      originY: 'bottom',
+      fill: color,
+      stroke: '#000000',
+      strokeWidth: 0.35,
+    });
+    rectLabelMap.set(rect, label);
+    canvas.add(label);
+  } else {
+    label.set({ text: textValue, fill: color });
+  }
+
+  const left = rect.left ?? 0;
+  const top = rect.top ?? 0;
+  label.set({
+    left: clamp(left + 2, 0, canvas.getWidth()),
+    top: clamp(top - 2, 12, canvas.getHeight()),
   });
 }
 

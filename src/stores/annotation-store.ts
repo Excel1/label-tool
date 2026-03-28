@@ -25,9 +25,16 @@ export const useAnnotationStore = defineStore('annotation', {
   }),
   getters: {
     queueLength: (state) => state.queue.length,
-    classOptions: (state) => state.classes.map((item) => ({ label: `${item.id} - ${item.name}`, value: item.id })),
+    classOptions: (state) =>
+      state.classes.map((item) => ({
+        label: `${item.id} - ${item.name}`,
+        value: item.id,
+        color: item.color,
+      })),
     classColor: (state) => (classId: number) =>
       state.classes.find((item) => item.id === classId)?.color ?? '#1976d2',
+    className: (state) => (classId: number) =>
+      state.classes.find((item) => item.id === classId)?.name ?? `class-${classId}`,
   },
   actions: {
     enqueueFrame(payload: AnnotationFrame) {

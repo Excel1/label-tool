@@ -32,7 +32,24 @@
           filled
           :label="t('annotation.classSelect')"
           @update:model-value="onClassChange"
-        />
+        >
+          <template #option="scope">
+            <q-item v-bind="scope.itemProps">
+              <q-item-section avatar>
+                <q-avatar size="10px" :style="{ background: scope.opt.color }" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>{{ scope.opt.label }}</q-item-label>
+              </q-item-section>
+            </q-item>
+          </template>
+          <template #selected-item="scope">
+            <div class="row items-center no-wrap q-gutter-xs">
+              <q-avatar size="10px" :style="{ background: scope.opt.color }" />
+              <span>{{ scope.opt.label }}</span>
+            </div>
+          </template>
+        </q-select>
       </div>
     </div>
 
@@ -43,7 +60,7 @@
       {{ t('annotation.instructions') }}
     </div>
 
-    <q-card v-if="annotationStore.current" bordered flat>
+    <q-card v-if="annotationStore.current" bordered flat class="current-image-card">
       <q-card-section>
         <div class="text-h6">{{ t('annotation.currentFrame') }}</div>
       </q-card-section>
@@ -54,6 +71,7 @@
         <annotation-canvas
           :image-src="currentImageSrc"
           :class-color="annotationStore.classColor"
+          :class-name="annotationStore.className"
           :selected-class-id="selectedClassId"
           :boxes="currentBoxes"
           @update:boxes="onBoxesUpdate"
@@ -173,3 +191,10 @@ async function onSubmitCurrent() {
   }
 }
 </script>
+
+<style scoped>
+.current-image-card {
+  max-width: 980px;
+  margin: 0 auto;
+}
+</style>
