@@ -27,7 +27,7 @@ export const useAnnotationStore = defineStore('annotation', {
     queueLength: (state) => state.queue.length,
     classOptions: (state) =>
       state.classes.map((item) => ({
-        label: `${item.id} - ${item.name}`,
+        label: item.name,
         value: item.id,
         color: item.color,
       })),
@@ -102,10 +102,16 @@ export const useAnnotationStore = defineStore('annotation', {
         }
 
         this.isSubmitting = true;
+        const labelsText = serializeYoloLabels(this.current.boxes);
+
+        console.log('[SEND] image(base64):');
+        console.log(this.current.image);
+        console.log('[SEND] labels.txt:');
+        console.log(labelsText);
 
         await MqttAnnotationService.publish({
           image: this.current.image,
-          labels: serializeYoloLabels(this.current.boxes),
+          labels: labelsText,
         });
 
         this.queue.shift();

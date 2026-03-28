@@ -3,14 +3,24 @@ export default {
   success: 'Aktion war erfolgreich',
   annotation: {
     actions: {
-      connect: 'MQTT starten',
+      connect: 'Mit MQTT verbinden',
       mock: 'Mock-Bild in Queue',
-      send: 'Aktuelles senden',
+      send: 'Bild senden',
+      tools: 'Mehr',
       removeSelected: 'Ausgewaehlte Box loeschen'
+    },
+    status: {
+      connected: 'Verbunden',
+      disconnected: 'Nicht verbunden'
     },
     classSelect: 'Klasse',
     queue: 'Queue: {count}',
     currentFrame: 'Aktuelles Bild',
+    labels: {
+      title: 'Labels',
+      deleteHint: 'Entf loescht die Auswahl',
+      empty: 'Noch keine Labels vorhanden'
+    },
     instructions: 'Klasse waehlen, mit Linksklick Box ziehen, per Ziehen verschieben/anpassen. Mit Mausrad zoomen und mit Rechtsklick ziehen verschieben.',
     empty: 'Queue ist leer. Starte MQTT oder lade ein Mock-Bild.',
     notify: {

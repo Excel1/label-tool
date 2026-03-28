@@ -14,6 +14,7 @@ import type { AnnotationBox } from 'src/interfaces/Annotation';
 const props = defineProps<{
   imageSrc: string;
   boxes: AnnotationBox[];
+  selectedBoxIndex: number;
   selectedClassId: number;
   classColor: (classId: number) => string;
   className: (classId: number) => string;
@@ -21,6 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'update:boxes', value: AnnotationBox[]): void;
+  (event: 'update:selectedBoxIndex', value: number): void;
   (event: 'update:selectedClassId', value: number): void;
   (event: 'image-load-failed', value: string): void;
 }>();
@@ -38,6 +40,7 @@ const rectLabelMap = new WeakMap<AnyRect, FabricText>();
 const syncingFromProps = ref(false);
 const isPanning = ref(false);
 const panPoint = ref<{ x: number; y: number } | null>(null);
+const lastTransformMode = ref<'move' | 'scale' | null>(null);
 
 const drawingRect = shallowRef<AnyRect | null>(null);
 const drawingStart = ref<Point | null>(null);
@@ -46,6 +49,7 @@ let resizeObserver: ResizeObserver | null = null;
 
 onMounted(() => {
   initCanvas();
+  window.addEventListener('keydown', onGlobalKeydown);
 
   if (viewportRef.value) {
     resizeObserver = new ResizeObserver(() => {
@@ -58,6 +62,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onGlobalKeydown);
+
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
@@ -109,6 +115,13 @@ watch(
   }
 );
 
+watch(
+  () => props.selectedBoxIndex,
+  () => {
+    syncSelectedRectFromProps();
+  }
+);
+
 function initCanvas() {
   if (!canvasRef.value) {
     return;
@@ -118,6 +131,7 @@ function initCanvas() {
     selection: false,
     preserveObjectStacking: true,
     stopContextMenu: true,
+    uniformScaling: false,
   });
 
   fabricCanvas.value = canvas;
@@ -167,7 +181,6 @@ function initCanvas() {
     drawingRect.value = rect;
 
     canvas.add(rect);
-    syncRectLabel(rect, canvas);
   });
 
   canvas.on('mouse:move', (opt) => {
@@ -205,7 +218,6 @@ function initCanvas() {
       height,
     });
 
-    syncRectLabel(drawingRect.value, canvas);
     canvas.requestRenderAll();
   });
 
@@ -224,6 +236,11 @@ function initCanvas() {
     const height = (rect.height ?? 0) * (rect.scaleY ?? 1);
 
     if (width < 6 || height < 6) {
+      const smallLabel = rectLabelMap.get(rect);
+      if (smallLabel) {
+        canvas.remove(smallLabel as unknown as FabricObject);
+        rectLabelMap.delete(rect);
+      }
       canvas.remove(rect as unknown as FabricObject);
       drawingRect.value = null;
       drawingStart.value = null;
@@ -250,39 +267,50 @@ function initCanvas() {
   });
 
   canvas.on('object:modified', () => {
-    constrainActiveRectToImageBounds(canvas);
     const active = canvas.getActiveObject();
     if (active instanceof Rect) {
+      if (lastTransformMode.value === 'move') {
+        constrainRectPositionToImageBounds(active, canvas);
+      } else {
+        constrainRectToImageBounds(active, canvas);
+      }
       syncRectLabel(active, canvas);
     }
+    lastTransformMode.value = null;
     canvas.requestRenderAll();
     emitBoxesFromCanvas();
   });
 
   canvas.on('object:moving', (opt) => {
     if (opt.target instanceof Rect) {
-      constrainRectToImageBounds(opt.target, canvas);
+      lastTransformMode.value = 'move';
+      constrainRectPositionToImageBounds(opt.target, canvas);
       syncRectLabel(opt.target, canvas);
     }
   });
 
   canvas.on('object:scaling', (opt) => {
     if (opt.target instanceof Rect) {
+      lastTransformMode.value = 'scale';
       constrainRectToImageBounds(opt.target, canvas);
       syncRectLabel(opt.target, canvas);
     }
   });
 
   canvas.on('selection:created', () => {
-    emitSelectedClassFromActiveObject();
+    emitSelectionStateFromActiveObject();
   });
 
   canvas.on('selection:updated', () => {
-    emitSelectedClassFromActiveObject();
+    emitSelectionStateFromActiveObject();
+  });
+
+  canvas.on('selection:cleared', () => {
+    emit('update:selectedBoxIndex', -1);
   });
 }
 
-function emitSelectedClassFromActiveObject() {
+function emitSelectionStateFromActiveObject() {
   const canvas = fabricCanvas.value;
   if (!canvas) {
     return;
@@ -290,9 +318,11 @@ function emitSelectedClassFromActiveObject() {
 
   const active = canvas.getActiveObject();
   if (!(active instanceof Rect)) {
+    emit('update:selectedBoxIndex', -1);
     return;
   }
 
+  emit('update:selectedBoxIndex', getRectIndex(active, canvas));
   emit('update:selectedClassId', getRectClass(active));
 }
 
@@ -389,6 +419,7 @@ function drawBoxesFromProps() {
 
   canvas.requestRenderAll();
   syncingFromProps.value = false;
+  syncSelectedRectFromProps();
 }
 
 function createRect(box: AnnotationBox): AnyRect {
@@ -413,6 +444,7 @@ function createRect(box: AnnotationBox): AnyRect {
     transparentCorners: false,
     cornerSize: 10,
     centeredRotation: true,
+    centeredScaling: false,
     selectable: true,
     evented: true,
   });
@@ -438,6 +470,7 @@ function createRectAtPointer(left: number, top: number, classId: number): AnyRec
     transparentCorners: false,
     cornerSize: 10,
     centeredRotation: true,
+    centeredScaling: false,
   });
 
   rect.setControlsVisibility({ mtr: false });
@@ -447,35 +480,80 @@ function createRectAtPointer(left: number, top: number, classId: number): AnyRec
   return rect;
 }
 
-function constrainActiveRectToImageBounds(canvas: Canvas) {
-  const active = canvas.getActiveObject();
-  if (!(active instanceof Rect)) {
-    return;
+function constrainRectToImageBounds(rect: AnyRect, canvas: Canvas) {
+  const canvasWidth = canvas.getWidth();
+  const canvasHeight = canvas.getHeight();
+
+  let left = rect.left ?? 0;
+  let top = rect.top ?? 0;
+  let right = left + (rect.width ?? 0) * (rect.scaleX ?? 1);
+  let bottom = top + (rect.height ?? 0) * (rect.scaleY ?? 1);
+
+  if (right < left) {
+    const temp = left;
+    left = right;
+    right = temp;
   }
 
-  constrainRectToImageBounds(active, canvas);
+  if (bottom < top) {
+    const temp = top;
+    top = bottom;
+    bottom = temp;
+  }
+
+  if (left < 0 && right > canvasWidth) {
+    left = 0;
+    right = canvasWidth;
+  } else if (left < 0) {
+    left = 0;
+  } else if (right > canvasWidth) {
+    right = canvasWidth;
+  }
+
+  if (top < 0 && bottom > canvasHeight) {
+    top = 0;
+    bottom = canvasHeight;
+  } else if (top < 0) {
+    top = 0;
+  } else if (bottom > canvasHeight) {
+    bottom = canvasHeight;
+  }
+
+  if (right - left < 1) {
+    right = Math.min(canvasWidth, left + 1);
+  }
+
+  if (bottom - top < 1) {
+    bottom = Math.min(canvasHeight, top + 1);
+  }
+
+  const baseWidth = Math.max(0.001, rect.width ?? 0.001);
+  const baseHeight = Math.max(0.001, rect.height ?? 0.001);
+
+  rect.set({
+    left,
+    top,
+    scaleX: (right - left) / baseWidth,
+    scaleY: (bottom - top) / baseHeight,
+    flipX: false,
+    flipY: false,
+  });
+  rect.setCoords();
 }
 
-function constrainRectToImageBounds(rect: AnyRect, canvas: Canvas) {
+function constrainRectPositionToImageBounds(rect: AnyRect, canvas: Canvas) {
   const canvasWidth = canvas.getWidth();
   const canvasHeight = canvas.getHeight();
 
   const widthPx = Math.max(1, (rect.width ?? 0) * (rect.scaleX ?? 1));
   const heightPx = Math.max(1, (rect.height ?? 0) * (rect.scaleY ?? 1));
 
-  const boundedWidth = Math.min(widthPx, canvasWidth);
-  const boundedHeight = Math.min(heightPx, canvasHeight);
-
-  const left = clamp(rect.left ?? 0, 0, Math.max(0, canvasWidth - boundedWidth));
-  const top = clamp(rect.top ?? 0, 0, Math.max(0, canvasHeight - boundedHeight));
+  const maxLeft = Math.max(0, canvasWidth - widthPx);
+  const maxTop = Math.max(0, canvasHeight - heightPx);
 
   rect.set({
-    left,
-    top,
-    width: boundedWidth,
-    height: boundedHeight,
-    scaleX: 1,
-    scaleY: 1,
+    left: clamp(rect.left ?? 0, 0, maxLeft),
+    top: clamp(rect.top ?? 0, 0, maxTop),
   });
   rect.setCoords();
 }
@@ -565,6 +643,72 @@ function emitBoxesFromCanvas() {
     });
 
   emit('update:boxes', boxes);
+}
+
+function syncSelectedRectFromProps() {
+  const canvas = fabricCanvas.value;
+  if (!canvas) {
+    return;
+  }
+
+  const rects = getRectObjects(canvas);
+  if (props.selectedBoxIndex < 0 || props.selectedBoxIndex >= rects.length) {
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+    return;
+  }
+
+  const rect = rects[props.selectedBoxIndex];
+  canvas.setActiveObject(rect as unknown as FabricObject);
+  emit('update:selectedClassId', getRectClass(rect));
+  canvas.requestRenderAll();
+}
+
+function getRectObjects(canvas: Canvas) {
+  return canvas.getObjects().filter((obj): obj is AnyRect => obj instanceof Rect);
+}
+
+function getRectIndex(rect: AnyRect, canvas: Canvas) {
+  return getRectObjects(canvas).indexOf(rect);
+}
+
+function onGlobalKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Delete' && event.key !== 'Backspace') {
+    return;
+  }
+
+  const target = event.target as HTMLElement | null;
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target?.isContentEditable
+  ) {
+    return;
+  }
+
+  const canvas = fabricCanvas.value;
+  if (!canvas) {
+    return;
+  }
+
+  const active = canvas.getActiveObject();
+  if (!(active instanceof Rect)) {
+    return;
+  }
+
+  event.preventDefault();
+  const label = rectLabelMap.get(active);
+  if (label) {
+    canvas.remove(label as unknown as FabricObject);
+    rectLabelMap.delete(active);
+  }
+
+  rectClassMap.delete(active);
+  canvas.remove(active as unknown as FabricObject);
+  canvas.discardActiveObject();
+  emit('update:selectedBoxIndex', -1);
+  emitBoxesFromCanvas();
+  canvas.requestRenderAll();
 }
 
 function clamp01(value: number) {
