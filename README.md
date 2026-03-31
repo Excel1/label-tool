@@ -39,10 +39,10 @@ quasar build
 ## Run with Docker
 ```bash
 docker build -t label-tool .
-docker run --rm -p 8080:80 label-tool
+docker run --rm -p 9000:80 label-tool
 ```
 
-Then open http://localhost:8080
+Then open http://localhost:9000
 
 ### Customize the configuration
 See [Configuring quasar.config.js](https://v2.quasar.dev/quasar-cli-vite/quasar-config-js).
