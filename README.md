@@ -36,5 +36,13 @@ npm run format
 quasar build
 ```
 
+## Run with Docker
+```bash
+docker build -t label-tool .
+docker run --rm -p 8080:80 label-tool
+```
+
+Then open http://localhost:8080
+
 ### Customize the configuration
 See [Configuring quasar.config.js](https://v2.quasar.dev/quasar-cli-vite/quasar-config-js).
